@@ -8,12 +8,16 @@ import * as sqs from "aws-cdk-lib/aws-sqs";
 import * as sns from "aws-cdk-lib/aws-sns";
 import * as subs from "aws-cdk-lib/aws-sns-subscriptions";
 import * as iam from "aws-cdk-lib/aws-iam";
+import { DynamoDBClient, PutItemCommand } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 
 import { Construct } from "constructs";
 
 export class EDAAppStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
+
 
     const imagesBucket = new s3.Bucket(this, "images", {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
@@ -70,6 +74,8 @@ export class EDAAppStack extends cdk.Stack {
       }
     );
 
+
+    
     const mailerFn = new lambdanode.NodejsFunction(this, "mailer-function", {
       runtime: lambda.Runtime.NODEJS_16_X,
       memorySize: 1024,
@@ -113,5 +119,27 @@ export class EDAAppStack extends cdk.Stack {
     new cdk.CfnOutput(this, "bucketName", {
       value: imagesBucket.bucketName,
     });
+
+
+
+    // DynamoDB table
+const dynamoDBTable = new dynamodb.Table(this, "ImageDataTable", {
+  partitionKey: { name: "ImageKey", type: dynamodb.AttributeType.STRING },
+  removalPolicy: cdk.RemovalPolicy.DESTROY,
+});
+
+// Connecting DynamoDB table to Lambda function
+processImageFn.addEnvironment("DYNAMODB_TABLE", dynamoDBTable.tableName);
+
+
+// Outputting DynamoDB table name
+new cdk.CfnOutput(this, "dynamoDBTableName", {
+  value: dynamoDBTable.tableName,
+});
   }
 }
+
+
+
+  
+
