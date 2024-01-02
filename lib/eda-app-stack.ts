@@ -32,7 +32,9 @@ export class EDAAppStack extends cdk.Stack {
     });
 
     
-
+    const failedImageQueue = new sqs.Queue(this, "failed-image-queue", {
+      receiveMessageWaitTime: cdk.Duration.seconds(10),
+    });
     
 
     // Add an SNS topic
@@ -49,6 +51,7 @@ export class EDAAppStack extends cdk.Stack {
     );
 
     
+    
 
     
 
@@ -56,6 +59,8 @@ export class EDAAppStack extends cdk.Stack {
     newImageTopic.addSubscription(new subs.SqsSubscription(imageProcessQueue));
 
     newImageTopic.addSubscription(new subs.SqsSubscription(mailerQ));
+
+    
 
     // Lambda functions
 
@@ -77,7 +82,22 @@ export class EDAAppStack extends cdk.Stack {
       entry: `${__dirname}/../lambdas/mailer.ts`,
     });
 
+    const failedImageMailerFn = new lambdanode.NodejsFunction(this, "failedImageMailerFn", {
+      runtime: lambda.Runtime.NODEJS_14_X,
+      entry: `${__dirname}/../lambdas/failedImageMailer.ts`,
+      timeout: cdk.Duration.seconds(15),
+      memorySize: 128,
+    });
+
     // Event triggers
+
+
+    
+const failedImageEventSource = new events.SqsEventSource(failedImageQueue, {
+  batchSize: 5,
+  maxBatchingWindow: cdk.Duration.seconds(10),
+});
+
 
     const newImageEventSource = new events.SqsEventSource(imageProcessQueue, {
       batchSize: 5,
@@ -91,12 +111,26 @@ export class EDAAppStack extends cdk.Stack {
 
     processImageFn.addEventSource(newImageEventSource);
     mailerFn.addEventSource(newImageMailEventSource);
+    failedImageMailerFn.addEventSource(failedImageEventSource);
 
     // Permissions
 
     imagesBucket.grantRead(processImageFn);
+    imagesBucket.grantRead(failedImageMailerFn);
 
     mailerFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          "ses:SendEmail",
+          "ses:SendRawEmail",
+          "ses:SendTemplatedEmail",
+        ],
+        resources: ["*"],
+      })
+    );
+
+    failedImageMailerFn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: [
